@@ -1,0 +1,12 @@
+.history/*
+checkpoint*/*
+*.pt
+*.pyc
+logs*/*
+results/*
+tta_results/*
+data/*
+runs_pretrain/*
+merge_rt.py
+eata.py
+dataset.py
