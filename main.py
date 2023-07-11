@@ -69,18 +69,20 @@ def adapt():
                 set_cal_mseloss(ecotta_networks, True)
                 outputs = ecotta_networks(x_curr)
                 loss_ent = entropy_minmization(outputs,e_margin=args.e_margin)
-
+                # loss_ent.backward(retain_graph=True)
+                loss_ent.backward()
+                outputs = ecotta_networks(x_curr)
                 loss_reg_all = 0.
-                gamma = 2 ## What's gamma used for?  In the paper, lambda is 0.5
+                gamma = args.lambda_reg ## What's gamma used for?  In the paper, lambda is 0.5
                 for i, encoder in enumerate(ecotta_networks.encoders):
                     reg_loss = encoder.btsloss * gamma
-                    loss_reg_all += reg_loss
-                    # try:
-                    #     reg_loss.backward()
-                    # except:
-                    #     print(i)
-                loss = loss_ent+args.lambda_reg*loss_reg_all
-                loss.backward()
+                    reg_loss.backward()
+                    # loss_reg_all += reg_loss
+                # loss = loss_ent+args.lambda_reg*loss_reg_all
+                # loss.backward()
+                # optimizer_TTA.step()
+                # optimizer_TTA.zero_grad()
+
                 set_cal_mseloss(ecotta_networks, False)
 
                 optimizer_TTA.step()
@@ -242,17 +244,17 @@ def eval_training(epoch=0, tb=True):
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('-net', type=str, default='wideresnet', help='net type')
+    parser.add_argument('-net', type=str, default='wideresnet40', help='net type')
     parser.add_argument('-gpu', action='store_true', default=True, help='use gpu or not')
     parser.add_argument('-b', type=int, default=64, help='batch size for dataloader')
     # parser.add_argument('-warm', type=int, default=1, help='warm up training phase')
     parser.add_argument('-lr', type=float, default=5e-2, help='initial learning rate')
     parser.add_argument('-lr_tta', type=float, default=2.5e-5, help='initial learning rate')
 
-    parser.add_argument('-warmup_checkpoint', type=str, default='checkpoint_pretrain/wideresnet/original_meta_bnTrue_bs64_lr1.5e-2/wideresnet-10-regular.pth', help='checkpoint to load, needed for tta mode')
+    parser.add_argument('-warmup_checkpoint', type=str, help='checkpoint to load, needed for tta mode')
     parser.add_argument('-e_margin', type=float, default=math.log(100)*0.40, help='entropy margin E_0 in Eqn. (3) for filtering reliable samples') # default value for cifar100
-    parser.add_argument('-lambda_reg', type=float, default=1, help='importance of Regulation item')
-    parser.add_argument('-mode', type=str, default='pretrain',help='pretrain:warmup phase; tta:tta phase ; both:warmup+tta')#)
+    parser.add_argument('-lambda_reg', type=float, default=2, help='importance of Regulation item')
+    parser.add_argument('-mode', type=str, default='tta',help='pretrain:warmup phase; tta:tta phase ; both:warmup+tta')#)
     parser.add_argument('-pretrain_bn',action='store_true', default=True, help='whether to freeze the source bn statistics in pretrain phase')
     parser.add_argument('-tta_optim',type=str, default='new_optim') # original_optim: tta optimizer inherit the statedict of warmup optimizer
     parser.add_argument('-tta_bn', action='store_true', default=False, help='whether to freeze the source bn statistics in tta phase')
@@ -338,7 +340,7 @@ if __name__ == '__main__':
             net.eval()
         adapt()
     elif args.mode == 'tta':
-        # checkpoint_path = 'checkpoint_pretrain/wideresnet/original_meta_bnTrue_bs64_lr1.5e-2/wideresnet-10-regular.pth'
+        # checkpoint_path = 'checkpoint_pretrain/wideresnet40/original_meta_bnTrue_bs64_lr1.5e-2/wideresnet40-10-regular.pth'
         checkpoint_path = args.warmup_checkpoint
         ckpt = torch.load(checkpoint_path)
         net.load_state_dict(ckpt['net'])
