@@ -4,9 +4,9 @@ This is a (unaccomplished) community implementation for the paper [EcoTTA](https
 Reference code:  
 [pytorch-cifar100](https://github.com/weiaicunzai/pytorch-cifar100)   
 [EATA](https://github.com/mr-eggplant/EATA/blob/main)  
-[TENT]([Title](https://github.com/DequanWang/tent))  
- Folder Robustbench cloned from [Robustbench]([Title](https://github.com/RobustBench/robustbench))  
- Folder autoattack cloned from [Auto-attack]([Title](https://github.com/fra31/auto-attack))  
+[TENT](https://github.com/DequanWang/tent)  
+ Folder Robustbench cloned from [Robustbench](https://github.com/RobustBench/robustbench)  
+ Folder autoattack cloned from [Auto-attack](https://github.com/fra31/auto-attack)  
 
 Dataset: CIFAR10, CIFAR-100  
 Model: WideResNet28, WideResNet40
