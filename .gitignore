@@ -10,3 +10,6 @@ runs_pretrain/*
 merge_rt.py
 eata.py
 dataset.py
+main_cifar10.py
+wandb/*
+robust_models/*
