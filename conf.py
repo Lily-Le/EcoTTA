@@ -3,18 +3,9 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-"""Configuration file (powered by YACS)."""
-### from Tent
-
-# import argparse
-# import os
-# import sys
-# import logging
-# import random
-# import torch
-# import numpy as np
-# from datetime import datetime
-# # from iopath.common.file_io import g_pathmgr
+"""Configuration file (powered by YACS).
+Reference Code: [TENT](https://github.com/DequanWang/tent)  
+"""
 from yacs.config import CfgNode as CfgNode
 
 

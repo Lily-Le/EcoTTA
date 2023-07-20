@@ -2,8 +2,10 @@
 #!/usr/bin/env	python3
 
 """ train network using pytorch
+Reference Code: [pytorch-cifar100](https://github.com/weiaicunzai/pytorch-cifar100)   
+[EATA](https://github.com/mr-eggplant/EATA/blob/main)  
+[TENT](https://github.com/DequanWang/tent)  
 
-author baiyu
 """
 
 import os
@@ -65,7 +67,7 @@ def adapt():
                 
                 outputs = net(x_curr)
                 loss_reg_all = 0.
-                gamma = args.lambda_reg ## What's gamma used for?  In the paper, lambda is 0.5
+                gamma = args.lambda_reg 
                 for i, encoder in enumerate(net.encoders):
                     reg_loss = encoder.btsloss * gamma
                     reg_loss.backward()
@@ -160,7 +162,7 @@ def warmup_train(epoch):
         writer.add_scalar('Train/loss', loss.item(), n_iter)
         writer.add_scalar('Train/acc', correct.item() / float(args.b * (batch_index + 1)), n_iter)
         if epoch <= args.warm:
-            warmup_scheduler.step()
+           warmup_scheduler.step()
 
     # for name, param in net.named_parameters():
     #     if 'meta_parts' in name:
@@ -222,7 +224,7 @@ if __name__ == '__main__':
     parser.add_argument('--data_path', type=str, default='./data', help='path to dataset')
     parser.add_argument('--gpu', action='store_true', default=True, help='use gpu or not')
     parser.add_argument('--b', type=int, default=64, help='batch size for dataloader')
-    parser.add_argument('--mode', type=str, default='tta',help='pretrain:warmup phase; tta:tta phase;')#)
+    parser.add_argument('--mode', type=str, default='pretrain',help='pretrain:warmup phase; tta:tta phase;')#)
     #--------If mode = pretrain
     parser.add_argument('--checkpoint_path', type=str, default='./checkpoint_pretrain/trainscheduler', help='path to save warmup model')
     parser.add_argument('--warm', type=int, default=1, help='warm up training phase')
@@ -231,17 +233,14 @@ if __name__ == '__main__':
     parser.add_argument('--log_dir_pretrain', type=str, default='logs_pretrain/trainscheduler', help='log directory for Tensorboard log output')
     #--------If mode = tta
     parser.add_argument('--lr_tta', type=float, default=5e-3, help='initial learning rate')
-    parser.add_argument('--warmup_checkpoint', type=str, default='checkpoint_pretrain/wideresnet28/original_meta_bnTrue_bs64_lr0.05/wideresnet28-10-regular.pth', help='checkpoint to load, needed for tta mode')
+    parser.add_argument('--warmup_checkpoint', type=str, default='./checkpoint_pretrain/wideresnet28/warmup_bs64_lr0.05/wideresnet28-10-regular.pth', help='checkpoint to load, needed for tta mode')
     parser.add_argument('--e_margin', type=float, default=0.40, help='entropy margin E_0 in Eqn. (3) for filtering reliable samples') # default value for cifar100
     parser.add_argument('--lambda_reg', type=float, default=0.25, help='importance of Regulation item')
     parser.add_argument('--log_dir_tta', type=str, default='logs_tta', help='log directory for Tensorboard log output')
     
 
     args = parser.parse_args()
-    # if args.mode =='tta':
-    #     wandb_name = args.warmup_checkpoint.split('/')[-2]+'-'+f'bs{args.b}_ttalr{args.lr_tta}_lamb{args.lambda_reg}_emargin{args.e_margin}'
-    #     wandb.init(project='Ecotta1_debug',name= wandb_name ,config=args)
-    # net = get_network(args)
+
     if args.net == 'wideresnet40':
         net = ecotta_networks_wrs40
     elif args.net.startswith('wideresnet28'):
@@ -259,7 +258,7 @@ if __name__ == '__main__':
 
 
     result_dir = os.path.join(args.net,
-        f'original_meta_bs{args.b}_lr{args.lr}')
+        f'warmup_bs{args.b}_lr{args.lr}')
 
     # data preprocessing:
     # transform for training data: colorjitter, gaussianblur, grayscale
@@ -308,18 +307,11 @@ if __name__ == '__main__':
         net.train()
 
         for epoch in range(1, args.warmup_epoch + 1):
-            # if epoch > args.warm:
-            #     train_scheduler.step(epoch)
+            if epoch > args.warm:
+                train_scheduler.step(epoch)
             warmup_train(epoch)
             acc = eval_training(epoch)
 
-            #start to save best performance model after learning rate decay to 0.01
-            # if epoch > settings.MILESTONES[1] and best_acc < acc:
-            #     weights_path = checkpoint_path.format(net=args.net, epoch=epoch, type='best')
-            #     print('saving weights file to {}'.format(weights_path))
-            #     torch.save({'net':net.state_dict(),'optim':optimizer.state_dict()}, weights_path)
-            #     best_acc = acc
-            #     continue
 
             if not epoch % args.warmup_epoch:
                 weights_path = checkpoint_path.format(net=args.net, epoch=epoch, type='regular')
@@ -327,7 +319,6 @@ if __name__ == '__main__':
                 torch.save({'net':net.state_dict(),'optim':optimizer.state_dict()}, weights_path)
 
     elif args.mode == 'tta':
-        # checkpoint_path = 'checkpoint_pretrain/wideresnet40/original_meta_bnTrue_bs64_lr1.5e-2/wideresnet40-10-regular.pth'
         checkpoint_path = args.warmup_checkpoint
         ckpt = torch.load(checkpoint_path)
 
