@@ -2,6 +2,7 @@
 checkpoint*/*
 *.pt
 *.pyc
+.idea/*
 logs*/*
 results/*
 tta_results/*
