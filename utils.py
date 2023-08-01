@@ -119,6 +119,49 @@ def get_test_dataloader(dataset,batch_size=16, num_workers=2, shuffle=True):
 
     return cifar_test_loader
 
+
+def get_dataloader_imagenet(datapath,batch_size=16, num_workers=2):
+    """ return training dataloader
+    Args:
+        mean: mean of cifar100 training dataset
+        std: std of cifar100 training dataset
+        path: path to cifar100 training python dataset
+        batch_size: dataloader batchsize
+        num_workers: dataloader num_works
+        shuffle: whether to shuffle
+    Returns: train_data_loader:torch dataloader object
+    """
+
+    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+
+    transform_train = transforms.Compose([transforms.Resize(256),transforms.CenterCrop(224),
+            transforms.RandomApply([transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.4, hue=0.1)], p=0.4),
+            transforms.RandomApply([transforms.GaussianBlur(kernel_size=(3,3), sigma=(0.1, 2.0))], p=0.2),
+            transforms.RandomGrayscale(p=0.1),
+            transforms.ToTensor(),
+            normalize,
+        # transforms.Normalize([0.5] * 3, [0.5] * 3)        # transforms.Normalize(mean, std)
+        ])
+    transform_test = transforms.Compose([transforms.Resize(256),
+									transforms.CenterCrop(224),
+									transforms.ToTensor(),
+									normalize])
+    #cifar100_training = CIFAR100Train(path, transform=transform_train)
+    # 加载训练集
+    train_dataset = torchvision.datasets.ImageFolder(root=datapath+"/train",transform=transform_train)
+    # torchvision.datasets.ImageNet(root=datapath+"/train", split='train', transform=transform_train)
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+
+    # 加载验证集
+    val_dataset = torchvision.datasets.ImageFolder(root=datapath+"/val",transform=transform_test)
+   
+    # val_dataset = torchvision.datasets.ImageNet(root=datapath+"/val", split='val', transform=transform_train)
+    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+
+
+    return train_loader,val_loader
+
+
 class Logger(object):
     def __init__(self, filename='default.log', stream=sys.stdout):
         self.terminal = stream
