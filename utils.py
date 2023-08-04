@@ -139,13 +139,14 @@ def get_dataloader_imagenet(datapath,batch_size=16, num_workers=2):
             transforms.RandomApply([transforms.GaussianBlur(kernel_size=(3,3), sigma=(0.1, 2.0))], p=0.2),
             transforms.RandomGrayscale(p=0.1),
             transforms.ToTensor(),
-            normalize,
+            # normalize,
         # transforms.Normalize([0.5] * 3, [0.5] * 3)        # transforms.Normalize(mean, std)
         ])
     transform_test = transforms.Compose([transforms.Resize(256),
 									transforms.CenterCrop(224),
 									transforms.ToTensor(),
-									normalize])
+									# normalize
+         ])
     #cifar100_training = CIFAR100Train(path, transform=transform_train)
     # 加载训练集
     train_dataset = torchvision.datasets.ImageFolder(root=datapath+"/train",transform=transform_train)

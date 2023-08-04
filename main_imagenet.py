@@ -19,13 +19,14 @@ import torch.nn as nn
 import torch.optim as optim
 
 from torch.utils.tensorboard import SummaryWriter
-from robustbench.data import load_cifar100c, load_cifar10c
+from robustbench.data import load_imagenetc
 # from conf import settings
 from utils import get_training_dataloader, get_test_dataloader, entropy_minmization,set_cal_mseloss,WarmUpLR,Logger,\
     get_dataloader_imagenet
-from ecotta_models.resnet50 import ecotta_networks as ecotta_networks_res50
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from conf import cfg
+import os
+from ecotta_models.resnet50 import base_model, ecotta_networks as ecotta_networks_res50
 
 
 # import wandb
@@ -39,17 +40,14 @@ def adapt():
 
 
     if args.dataset =='imagenet':
-        load_corruption_dataset = load_cifar100c
-        e_margin = math.log(100)*args.e_margin
-    elif args.dataset =='cifar10':
-        load_corruption_dataset = load_cifar10c
-        e_margin = math.log(10) * args.e_margin
+        load_corruption_dataset = load_imagenetc
+        e_margin = math.log(1000)*args.e_margin
     else:
         raise NotImplementedError
     for severity in cfg.CORRUPTION.SEVERITY:
         err_mean = 0.
         for i_c, corruption_type in enumerate(cfg.CORRUPTION.TYPE):
-            x_test, y_test = load_corruption_dataset(cfg.CORRUPTION.NUM_EX,
+            x_test, y_test = load_corruption_dataset(5000,
                                            severity, args.data_path, False,
                                            [corruption_type])
             x_test, y_test = x_test.cuda(), y_test.cuda()
@@ -138,15 +136,15 @@ def warmup_train(epoch):
         n_iter = (epoch - 1) * len(training_loader) + batch_index + 1
 
         
-        for name,param in net.named_parameters():
-            if 'meta_part' in name:
-                writer.add_histogram(name, param.clone().cpu().data.numpy(), epoch)
-                try:
-                    # print(param.grad)
-                    writer.add_histogram(name + '/grad', param.grad.clone().cpu().data.numpy(), epoch)
-                except:
-                    # print(f'{name} no grad')
-                    pass
+        # for name,param in net.named_parameters():
+        #     if 'meta_part' in name:
+        #         writer.add_histogram(name, param.clone().cpu().data.numpy(), epoch)
+        #         try:
+        #             # print(param.grad)
+        #             writer.add_histogram(name + '/grad', param.grad.clone().cpu().data.numpy(), epoch)
+        #         except:
+        #             # print(f'{name} no grad')
+        #             pass
                     
         optimizer.step()
 
@@ -165,7 +163,11 @@ def warmup_train(epoch):
         writer.add_scalar('Train/acc', correct.item() / float(args.b * (batch_index + 1)), n_iter)
         if epoch <= args.warm:
            warmup_scheduler.step()
-
+        acc=correct.item() / float(args.b * (batch_index + 1))
+        if n_iter % 100 == 0:
+            weights_path = checkpoint_path.format(net=args.net, epoch=epoch, type='regular')
+            print('saving weights file to {}'.format(weights_path))
+            torch.save({'net':net.state_dict(),'optim':optimizer.state_dict(),'niter':n_iter,'epoch':epoch,'train_acc':acc}, weights_path)
     # for name, param in net.named_parameters():
     #     if 'meta_parts' in name:
     #         layer, attr = os.path.splitext(name)
@@ -175,6 +177,7 @@ def warmup_train(epoch):
     finish = time.time()
 
     print('epoch {} training time consumed: {:.2f}s'.format(epoch, finish - start))
+    return acc
 
 @torch.no_grad()
 def eval_training(epoch=0, tb=True):
@@ -222,10 +225,10 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--net', type=str, default='resnet50', help='net type')
-    parser.add_argument('--dataset', type=str, default='cifar10', help='net type')
-    parser.add_argument('--data_path', type=str, default='/root/autodl-tmp/imagenet', help='path to dataset')
+    parser.add_argument('--dataset', type=str, default='imagenet', help='net type')
+    parser.add_argument('--data_path', type=str, default='path_to_imagenet_dataset', help='path to dataset')
     parser.add_argument('--gpu', action='store_true', default=True, help='use gpu or not')
-    parser.add_argument('--b', type=int, default=32, help='batch size for dataloader')
+    parser.add_argument('--b', type=int, default=256, help='batch size for dataloader')
     parser.add_argument('--mode', type=str, default='pretrain',help='pretrain:warmup phase; tta:tta phase;')#)
     #--------If mode = pretrain
     parser.add_argument('--checkpoint_path', type=str, default='./checkpoint_pretrain', help='path to save warmup model')
@@ -275,7 +278,7 @@ if __name__ == '__main__':
     # parameters that require grad: defined in sample code
     optimizer = optim.SGD([params for params in net.parameters() if params.requires_grad], lr=args.lr, momentum=0.9) #, weight_decay=5e-4)
     optimizer_TTA = torch.optim.SGD([params for params in net.parameters() if params.requires_grad], args.lr_tta, momentum=0.9)
-    train_scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[3,6,8], gamma=0.2) #learning rate decay
+    # train_scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[3,6,8], gamma=0.2) #learning rate decay
     iter_per_epoch = len(training_loader)
     warmup_scheduler = WarmUpLR(optimizer, iter_per_epoch * args.warm)
     pretrain_scheduler = CosineAnnealingLR(optimizer, T_max=args.warmup_epoch)
@@ -296,7 +299,36 @@ if __name__ == '__main__':
         if not os.path.exists(log_path):
             os.makedirs(log_path)
         writer = SummaryWriter(log_dir=log_path)
+        print('-----------original acc--------------')
+        base_model.eval()
+        test_loss = 0.0 # cost function error
+        correct = 0.0
+        start = time.time()
+        for (images, labels) in test_loader:
 
+            if args.gpu:
+                images = images.cuda()
+                labels = labels.cuda()
+
+            outputs = base_model(images)
+            loss = loss_function(outputs, labels)
+
+            test_loss += loss.item()
+            _, preds = outputs.max(1)
+            correct += preds.eq(labels).sum()
+            print(f'current acc {preds.eq(labels).sum()/images.shape[0]}')
+            # correct2 += preds2.eq(labels).sum()
+
+        finish = time.time()
+
+        print('Evaluating Network.....')
+        print('Test set: Epoch: {}, Average loss: {:.4f}, Accuracy: {:.4f}, Time consumed:{:.2f}s'.format(
+            0,
+            test_loss / len(test_loader.dataset),
+            correct.float() / len(test_loader.dataset),
+            finish - start
+        ))
+        print()       
         print('----------------start pretrain-----------------')
  # running bn for the source model during warmup process
         net.train()
@@ -304,14 +336,14 @@ if __name__ == '__main__':
         for epoch in range(1, args.warmup_epoch + 1):
             if epoch > args.warm:
                 pretrain_scheduler.step(epoch)
-            warmup_train(epoch)
+            acc_train=warmup_train(epoch)
             acc = eval_training(epoch)
 
 
-            if not epoch % args.warmup_epoch:
-                weights_path = checkpoint_path.format(net=args.net, epoch=epoch, type='regular')
-                print('saving weights file to {}'.format(weights_path))
-                torch.save({'net':net.state_dict(),'optim':optimizer.state_dict()}, weights_path)
+            # if not epoch % args.warmup_epoch:
+            weights_path = checkpoint_path.format(net=args.net, epoch=epoch, type='regular')
+            print('saving weights file to {}'.format(weights_path))
+            torch.save({'net':net.state_dict(),'optim':optimizer.state_dict(),'epoch':epoch,'train_acc':acc}, weights_path)
 
     elif args.mode == 'tta':
         checkpoint_path = args.warmup_checkpoint
@@ -337,7 +369,6 @@ if __name__ == '__main__':
 
         tta_tblog_path =  os.path.dirname(checkpoint_path).replace(args.checkpoint_path,args.log_dir_tta) + f'/bs{args.b}_ttalr{args.lr_tta}_lamb{args.lambda_reg}_{args.e_margin}'
         writer = SummaryWriter(log_dir=tta_tblog_path)
-
         print('--------------   begin tta   ------------------------')
         print(tta_tblog_path)
      
